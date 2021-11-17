@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"net/http"
 
@@ -38,23 +39,64 @@ func main() {
 	}
 
 	app.printMetricsStat(metrics)
+	metricsList, err := app.buildMetricsList(metrics)
+	if err != nil {
+		log.Logf("FATAL Failed to build metrics list: %+v", err)
+	}
 
-	log.Logf("INFO Importing libraries")
+	global, err := app.buildGlobalSetting()
+	if err != nil {
+		log.Logf("FATAL Failed to build global dashboard settings: %+v", err)
+	}
+
+	log.Logf("INFO Generating dashboard")
+	vm := jsonnet.MakeVM()
+
 	importer := &jsonnet.FileImporter{
 		JPaths: []string{"grafonnet-lib"},
 	}
-
-	log.Logf("INFO Making Jsonnet VM")
-	vm := jsonnet.MakeVM()
 	vm.Importer(importer)
+	vm.TLACode("metrics", metricsList)
+	vm.TLACode("global", global)
 
-	log.Logf("INFO Generating dashboard")
 	jsonStr, err := vm.EvaluateFile("dashboard.jsonnet")
 	if err != nil {
 		log.Logf("FATAL Failed to generate dashboard: %+v", err)
 	}
 
 	log.Logf("Dashboard: %+v", jsonStr)
+}
+
+type Metric struct {
+	Name string `json:"name"`
+	Expr string `json:"expr"`
+}
+
+type Global struct {
+	Datasource string `json:"datasource"`
+}
+
+func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) (string, error) {
+	metricsList := []Metric{}
+	for k, _ := range metrics {
+		metric := Metric{
+			Name: k + "Name",
+			Expr: k + "Expr",
+		}
+		metricsList = append(metricsList, metric)
+	}
+
+	str, err := json.Marshal(metricsList)
+	return string(str), err
+}
+
+func (app *App) buildGlobalSetting() (string, error) {
+	glob := Global{
+		Datasource: "Prometheus",
+	}
+
+	bytes, err := json.Marshal(glob)
+	return string(bytes), err
 }
 
 func (app *App) printMetricsStat(metrics map[string]*dto.MetricFamily) {
