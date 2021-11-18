@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-pkgz/lgr"
 	jsonnet "github.com/google/go-jsonnet"
@@ -20,7 +23,7 @@ type App struct{ log *lgr.Logger }
 func main() {
 	flag.Parse()
 
-	log := lgr.New(lgr.Msec, lgr.Debug, lgr.CallerFile, lgr.CallerFunc)
+	log := lgr.New(lgr.Out(os.Stderr), lgr.Msec, lgr.CallerFile, lgr.CallerFunc)
 
 	app := &App{log: log}
 
@@ -64,12 +67,15 @@ func main() {
 		log.Logf("FATAL Failed to generate dashboard: %+v", err)
 	}
 
-	log.Logf("Dashboard: %+v", jsonStr)
+	fmt.Println(jsonStr)
+
+	log.Logf("Dashboard generated and printed to stdout!")
 }
 
 type Metric struct {
-	Name string `json:"name"`
-	Expr string `json:"expr"`
+	Name   string `json:"name"`
+	Expr   string `json:"expr"`
+	Format string `json:"format"`
 }
 
 type Global struct {
@@ -78,10 +84,16 @@ type Global struct {
 
 func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) (string, error) {
 	metricsList := []Metric{}
-	for k, _ := range metrics {
+	for k, v := range metrics {
+		name := k
+		if v.Help != nil {
+			name = *v.Help
+			name = strings.TrimSuffix(name, ".")
+		}
 		metric := Metric{
-			Name: k + "Name",
-			Expr: k + "Expr",
+			Name:   name,
+			Expr:   k,
+			Format: "short",
 		}
 		metricsList = append(metricsList, metric)
 	}
