@@ -92,14 +92,48 @@ func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) (string, 
 		}
 		metric := Metric{
 			Name:   name,
-			Expr:   k,
 			Format: "short",
 		}
+		switch *v.Type {
+		case dto.MetricType_COUNTER:
+			metric.Expr = fmt.Sprintf("rate(%s[5m])", k)
+		case dto.MetricType_GAUGE:
+			metric.Expr = k
+		case dto.MetricType_HISTOGRAM:
+			labels := app.getMetricLabels(v)
+			labels = append(labels, "le")
+			metric.Expr = fmt.Sprintf("histogram_quantile(0.95, sum(rate(%s_bucket[5m])) by (%s))", k, strings.Join(labels, ","))
+		case dto.MetricType_SUMMARY:
+			metric.Expr = fmt.Sprintf("rate(%s_sum[5m]) / rate(%s_count[5m])", k, k)
+		}
+
 		metricsList = append(metricsList, metric)
 	}
 
 	str, err := json.Marshal(metricsList)
 	return string(str), err
+}
+
+func (app *App) getMetricLabels(metrics *dto.MetricFamily) []string {
+	labels := map[string]struct{}{} // use map to avoid duplicates
+
+	for _, metric := range metrics.Metric {
+		labelPairs := metric.Label
+		for _, l := range labelPairs {
+			if l == nil {
+				continue
+			}
+			labels[*l.Name] = struct{}{}
+		}
+		break
+	}
+
+	labelsSlice := []string{}
+	for k := range labels {
+		labelsSlice = append(labelsSlice, k)
+	}
+
+	return labelsSlice
 }
 
 func (app *App) buildGlobalSetting() (string, error) {
