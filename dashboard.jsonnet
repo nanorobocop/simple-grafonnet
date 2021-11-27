@@ -5,6 +5,13 @@ local panel(global, metric, x, width) =
     metric.name,
     format=metric.format,
     datasource=global.datasource,
+    legend_alignAsTable=true,
+    legend_avg=true,
+    legend_min=true,
+    legend_max=true,
+    legend_current=true,
+    legend_sortDesc=true,
+    legend_values=true,
   ).addTarget(
     grafana.prometheus.target(
       metric.expr,
