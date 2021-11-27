@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/go-pkgz/lgr"
@@ -42,7 +43,7 @@ func main() {
 	}
 
 	app.printMetricsStat(metrics)
-	metricsList, err := app.buildMetricsList(metrics)
+	metricsList := app.buildMetricsList(metrics)
 	if err != nil {
 		log.Logf("FATAL Failed to build metrics list: %+v", err)
 	}
@@ -59,7 +60,12 @@ func main() {
 		JPaths: []string{"grafonnet-lib"},
 	}
 	vm.Importer(importer)
-	vm.TLACode("metrics", metricsList)
+
+	metricsListEncoded, err := json.Marshal(metricsList)
+	if err != nil {
+		log.Logf("FATAL Failed to marshal metrics list: %+v", err)
+	}
+	vm.TLACode("metrics", string(metricsListEncoded))
 	vm.TLACode("global", global)
 
 	jsonStr, err := vm.EvaluateFile("dashboard.jsonnet")
@@ -82,7 +88,13 @@ type Global struct {
 	Datasource string `json:"datasource"`
 }
 
-func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) (string, error) {
+type ByName []Metric
+
+func (n ByName) Len() int           { return len(n) }
+func (n ByName) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n ByName) Less(i, j int) bool { return n[i].Name < n[j].Name }
+
+func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) []Metric {
 	metricsList := []Metric{}
 	for k, v := range metrics {
 		name := k
@@ -110,8 +122,9 @@ func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) (string, 
 		metricsList = append(metricsList, metric)
 	}
 
-	str, err := json.Marshal(metricsList)
-	return string(str), err
+	sort.Sort(ByName(metricsList))
+
+	return metricsList
 }
 
 func (app *App) getMetricLabels(metrics *dto.MetricFamily) []string {
