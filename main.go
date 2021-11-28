@@ -17,6 +17,7 @@ import (
 
 var (
 	metricsURL = flag.String("url", "", "URL to metrics endpoint")
+	debug      = flag.Bool("debug", false, "Debug logging")
 )
 
 type App struct{ log *lgr.Logger }
@@ -24,7 +25,12 @@ type App struct{ log *lgr.Logger }
 func main() {
 	flag.Parse()
 
-	log := lgr.New(lgr.Out(os.Stderr), lgr.Msec, lgr.CallerFile, lgr.CallerFunc)
+	logOptions := []lgr.Option{lgr.Out(os.Stderr)}
+	if *debug {
+		logOptions = append(logOptions, lgr.Debug)
+	}
+
+	log := lgr.New(logOptions...)
 
 	app := &App{log: log}
 
@@ -44,6 +50,9 @@ func main() {
 
 	app.printMetricsStat(metrics)
 	metricsList := app.buildMetricsList(metrics)
+	for _, m := range metricsList {
+		log.Logf("DEBUG %+v", m)
+	}
 	if err != nil {
 		log.Logf("FATAL Failed to build metrics list: %+v", err)
 	}
@@ -79,6 +88,7 @@ func main() {
 }
 
 type Metric struct {
+	Title  string `json:"title"`
 	Name   string `json:"name"`
 	Expr   string `json:"expr"`
 	Format string `json:"format"`
@@ -98,11 +108,17 @@ func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) []Metric 
 	metricsList := []Metric{}
 	for k, v := range metrics {
 		name := k
+		if v.Name != nil {
+			name = *v.Name
+		}
+
+		title := k
 		if v.Help != nil {
-			name = *v.Help
-			name = strings.TrimSuffix(name, ".")
+			title = *v.Help
+			title = strings.TrimSuffix(title, ".")
 		}
 		metric := Metric{
+			Title:  title,
 			Name:   name,
 			Format: "short",
 		}
