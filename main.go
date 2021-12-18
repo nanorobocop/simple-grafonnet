@@ -88,14 +88,24 @@ func main() {
 }
 
 type Metric struct {
-	Title  string `json:"title"`
 	Name   string `json:"name"`
+	Title  string `json:"title"`
 	Expr   string `json:"expr"`
 	Format string `json:"format"`
 }
 
 type Global struct {
 	Datasource string `json:"datasource"`
+}
+
+type Metrics []Metric
+
+func (metrics Metrics) NamesSlice() []string {
+	slice := []string{}
+	for _, m := range metrics {
+		slice = append(slice, m.Name)
+	}
+	return slice
 }
 
 type ByName []Metric
@@ -105,7 +115,7 @@ func (n ByName) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n ByName) Less(i, j int) bool { return n[i].Name < n[j].Name }
 
 func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) []Metric {
-	metricsList := []Metric{}
+	metricsList := Metrics{}
 	for k, v := range metrics {
 		name := k
 		if v.Name != nil {
@@ -139,6 +149,8 @@ func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) []Metric 
 	}
 
 	sort.Sort(ByName(metricsList))
+
+	group(metricsList.NamesSlice())
 
 	return metricsList
 }
@@ -199,4 +211,34 @@ func (app *App) printMetricsStat(metrics map[string]*dto.MetricFamily) {
 	for k, v := range mtype {
 		app.log.Logf("INFO Found metrics of type %s: %d", k, v)
 	}
+}
+
+// Group does very simple grouping.
+// Assuming strings are sorted, it distinguish group and subgroups separated by "_" underscore.
+// Idea of grouping is to have metrics grouped by namespace and subsystem.
+// Since namespace or system itself could have underscores as its part, splitting is not correct in this case.
+// See https://github.com/prometheus/client_golang/blob/0400fc44d42dd0bca7fb16e87ea0313bb2eb8c53/prometheus/metric.go#L68-L72
+func group(strs []string) map[string]map[string][]string {
+	// groups = map of group of subgroup of strings
+	groups := map[string]map[string][]string{}
+	group, subgroup := "", ""
+	for _, str := range strs {
+		elems := strings.Split(str, "_")
+		if group != elems[0] {
+			if len(elems) > 1 {
+				subgroup = elems[1]
+			} else {
+				subgroup = elems[0]
+			}
+
+			group = elems[0]
+			groups[group] = map[string][]string{subgroup: []string{str}}
+		} else if len(elems) > 1 && subgroup != elems[1] {
+			subgroup = elems[1]
+			groups[group][subgroup] = []string{str}
+		} else {
+			groups[group][subgroup] = append(groups[group][subgroup], str)
+		}
+	}
+	return groups
 }
