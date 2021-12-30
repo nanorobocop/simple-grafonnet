@@ -64,6 +64,7 @@ func main() {
 
 	log.Logf("INFO Generating dashboard")
 	vm := jsonnet.MakeVM()
+	vm.MaxStack = 1000
 
 	importer := &jsonnet.FileImporter{
 		JPaths: []string{"grafonnet-lib"},
@@ -88,15 +89,19 @@ func main() {
 }
 
 type Metric struct {
-	Title  string `json:"title"`
-	Name   string `json:"name"`
-	Expr   string `json:"expr"`
-	Format string `json:"format"`
+	Name     string `json:"name"`
+	Title    string `json:"title"`
+	Expr     string `json:"expr"`
+	Format   string `json:"format"`
+	Group    string `json:"group"`
+	Subgroup string `json:"subgroup"`
 }
 
 type Global struct {
 	Datasource string `json:"datasource"`
 }
+
+type Metrics []Metric
 
 type ByName []Metric
 
@@ -104,8 +109,17 @@ func (n ByName) Len() int           { return len(n) }
 func (n ByName) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
 func (n ByName) Less(i, j int) bool { return n[i].Name < n[j].Name }
 
+type ByGroup []Metric
+
+func (n ByGroup) Len() int      { return len(n) }
+func (n ByGroup) Swap(i, j int) { n[i], n[j] = n[j], n[i] }
+func (n ByGroup) Less(i, j int) bool {
+	return n[i].Group < n[j].Group ||
+		(n[i].Group == n[j].Group && n[i].Subgroup < n[j].Subgroup)
+}
+
 func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) []Metric {
-	metricsList := []Metric{}
+	metricsList := Metrics{}
 	for k, v := range metrics {
 		name := k
 		if v.Name != nil {
@@ -139,6 +153,9 @@ func (app *App) buildMetricsList(metrics map[string]*dto.MetricFamily) []Metric 
 	}
 
 	sort.Sort(ByName(metricsList))
+
+	metricsList.findGroups()
+	sort.Sort(ByGroup(metricsList))
 
 	return metricsList
 }
