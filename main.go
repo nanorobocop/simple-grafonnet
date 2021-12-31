@@ -18,6 +18,7 @@ import (
 var (
 	metricsURL = flag.String("url", "", "URL to metrics endpoint")
 	debug      = flag.Bool("debug", false, "Debug logging")
+	title      = flag.String("title", "App Name", "dashboard title")
 )
 
 type App struct{ log *lgr.Logger }
@@ -57,7 +58,7 @@ func main() {
 		log.Logf("FATAL Failed to build metrics list: %+v", err)
 	}
 
-	global, err := app.buildGlobalSetting()
+	global, err := app.buildGlobalSetting(*title)
 	if err != nil {
 		log.Logf("FATAL Failed to build global dashboard settings: %+v", err)
 	}
@@ -99,6 +100,7 @@ type Metric struct {
 
 type Global struct {
 	Datasource string `json:"datasource"`
+	Title      string `json:"title"`
 }
 
 type Metrics []Metric
@@ -182,9 +184,10 @@ func (app *App) getMetricLabels(metrics *dto.MetricFamily) []string {
 	return labelsSlice
 }
 
-func (app *App) buildGlobalSetting() (string, error) {
+func (app *App) buildGlobalSetting(title string) (string, error) {
 	glob := Global{
 		Datasource: "Prometheus",
+		Title:      title,
 	}
 
 	bytes, err := json.Marshal(glob)
