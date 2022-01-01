@@ -3,6 +3,7 @@ local grafana = import 'grafonnet-lib/grafonnet/grafana.libsonnet';
 local newPanel(global, metric, x, width) =
   local p = grafana.graphPanel.new(
     metric.title,
+    description=metric.name,
     format=metric.format,
     datasource=global.datasource,
     legend_alignAsTable=true,
